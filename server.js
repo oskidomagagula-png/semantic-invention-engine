@@ -1,39 +1,155 @@
-# Semantic Invention Engine
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { SemanticMiner } from './src/engine/SemanticMiner.js';
+import { IdeaScorer } from './src/engine/IdeaScorer.js';
+import { PatentMatcher } from './src/engine/PatentMatcher.js';
 
-A prototype for AI-powered semantic word mining and inventive scenario generation, combining a modern dark-mode interface with a TRIZ-inspired ideation workflow.
+dotenv.config();
 
-## Features
+const app = express();
+const PORT = process.env.PORT || 3001;
 
-- Semantic concept extraction from user input
-- Scenario synthesis using word-pair logic
-- Idea scoring for innovation potential
-- Modern dark-mode chat-like UI
-- Projected workflow for future patent/literature matching
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
 
-## Getting started
+const miner = new SemanticMiner();
+const scorer = new IdeaScorer();
+const patentMatcher = new PatentMatcher();
 
-```bash
-npm install
-npm run dev
-```
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
-This will start the React Vite client.
+// Semantic mining endpoint
+app.post('/api/mine', async (req, res) => {
+  try {
+    const { query, limit = 5 } = req.body;
 
-## Project structure
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+      return res.status(400).json({ error: 'Query is required and must be a non-empty string' });
+    }
 
-- `src/App.jsx` — prototype main interface
-- `src/index.css` — Tailwind setup and global styles
-- `server.js` — future backend API hook-up
+    const miningResult = miner.extract(query);
+    const scenarios = miner.generateScenarios(miningResult, limit);
 
-## Roadmap
+    res.json({
+      success: true,
+      miningResult,
+      scenarios,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Mining error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
-- Add semantic NLP pipeline
-- Add vector-based similarity search
-- Integrate TRIZ contradiction mappings
-- Connect external patent and literature APIs
-- Expand to multi-agent scenario generation
+// Scoring endpoint
+app.post('/api/score', async (req, res) => {
+  try {
+    const { scenario, concepts, domain } = req.body;
 
-## Notes
+    if (!scenario || !concepts || !domain) {
+      return res.status(400).json({ error: 'scenario, concepts, and domain are required' });
+    }
 
-This is a prototype designed to demonstrate the concept, not a final production system.
+    const scores = scorer.evaluate({
+      scenario,
+      concepts,
+      domain,
+    });
 
+    res.json({
+      success: true,
+      scores,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Scoring error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Patent matching endpoint (simulated)
+app.post('/api/patent-match', async (req, res) => {
+  try {
+    const { scenario, concepts } = req.body;
+
+    if (!scenario || !concepts) {
+      return res.status(400).json({ error: 'scenario and concepts are required' });
+    }
+
+    const matches = patentMatcher.search(scenario, concepts);
+
+    res.json({
+      success: true,
+      priorArtDensity: matches.density,
+      existingPatents: matches.patents,
+      noveltyScore: matches.noveltyScore,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Patent matching error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Batch idea generation and scoring
+app.post('/api/generate-ideas', async (req, res) => {
+  try {
+    const { query, count = 3 } = req.body;
+
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+      return res.status(400).json({ error: 'Query is required and must be a non-empty string' });
+    }
+
+    const miningResult = miner.extract(query);
+    const scenarios = miner.generateScenarios(miningResult, count);
+
+    const ideas = scenarios.map((scenario, idx) => {
+      const scores = scorer.evaluate({
+        scenario: scenario.text,
+        concepts: scenario.concepts,
+        domain: scenario.domain,
+      });
+
+      const patents = patentMatcher.search(scenario.text, scenario.concepts);
+
+      return {
+        id: Date.now() + idx,
+        title: `${scenario.concepts[0]} + ${scenario.concepts[1]}`,
+        scenario: scenario.text,
+        concepts: scenario.concepts,
+        domain: scenario.domain,
+        scores,
+        patents,
+        overallScore: Math.round(
+          (scores.semanticDistance * 0.3 +
+            scores.feasibility * 0.4 +
+            (100 - patents.density) * 0.3) /
+            3,
+        ),
+      };
+    });
+
+    res.json({
+      success: true,
+      ideas,
+      totalGenerated: ideas.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Idea generation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`\n🚀 Semantic Invention Engine API running on http://localhost:${PORT}`);
+  console.log(`📊 POST /api/mine - Extract semantic concepts`);
+  console.log(`🎯 POST /api/score - Evaluate idea feasibility`);
+  console.log(`📜 POST /api/patent-match - Check prior art`);
+  console.log(`💡 POST /api/generate-ideas - Full pipeline\n`);
+});
