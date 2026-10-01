@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: semantic-invention-backend
+    ports:
+      - '3001:3001'
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    restart: unless-stopped
+    volumes:
+      - ./src:/app/src
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3001/api/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: semantic-invention-frontend
+    ports:
+      - '5173:5173'
+    environment:
+      - VITE_API_BASE_URL=http://backend:3001
+    depends_on:
+      - backend
+    restart: unless-stopped
+    volumes:
+      - ./src:/app/src
+      - ./index.html:/app/index.html
+
+networks:
+  default:
+    name: semantic-invention-network
